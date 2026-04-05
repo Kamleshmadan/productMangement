@@ -31,7 +31,6 @@ public class CartController {
     }
 
     List<Integer> list=new ArrayList<>();
-    list.
     @PutMapping("/updateItems")
     public CartItems updateCartItem(
             @RequestParam String userName,
