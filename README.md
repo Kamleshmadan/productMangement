@@ -1,261 +1,146 @@
-# 🛒 Product Management System (Spring Boot)
+# Product Management API
 
-## 📌 Overview
+Spring Boot REST API for product catalog, shopping cart, and order placement, backed by Oracle Database and secured with Spring Security (HTTP Basic).
 
-This is a **Spring Boot-based backend application** for managing an e-commerce-like system.
-It supports operations for **Products, Users, Cart, and Orders**.
+## Tech stack
 
-The project demonstrates a layered architecture using:
+- **Java** 17  
+- **Spring Boot** 4.0.5 (`spring-boot-starter-webmvc`, `spring-boot-starter-data-jpa`, `spring-boot-starter-security`, `spring-boot-starter-validation`)  
+- **Oracle** JDBC (`ojdbc11`)  
+- **Lombok** (optional, for some classes)
 
-* Controller
-* Service
-* Repository
-* Entity
+## Prerequisites
 
----
+- JDK 17  
+- Oracle Database reachable from your machine (default config uses `localhost:1521:XE`)  
+- Maven **or** use the included Maven Wrapper (`mvnw` / `mvnw.cmd`)
 
-## 🚀 Features
+## Configuration
 
-### ✅ Product Management
+Edit `src/main/resources/application.properties` for your environment:
 
-* Create Product
-* Get all Products
-* Get Product by ID
-* Update Product
-* Delete Product
+| Property | Description |
+|----------|-------------|
+| `spring.datasource.url` | Oracle JDBC URL |
+| `spring.datasource.username` / `password` | DB credentials |
+| `spring.jpa.hibernate.ddl-auto` | `update` (schema evolves with entities) |
+| `server.port` | Default **8093** |
 
-### 👤 User Management
+## Run the application
 
-* Create User
-* Get User details
-
-### 🛒 Cart Management
-
-* Add item to cart
-* Remove item from cart
-* View cart
-
-### 📦 Order Management
-
-* Place order
-* View orders
-
----
-
-## 🏗️ Tech Stack
-
-* Java 17+
-* Spring Boot
-* Spring Data JPA
-* Hibernate
-* Maven
-* MySQL / H2 (depending on config)
-
----
-
-## 📂 Project Structure
-
-```
-com.example.productmanagement
-│
-├── controller
-├── service
-├── repository
-├── entity
-├── exception
-└── config
+```bash
+./mvnw spring-boot:run
 ```
 
----
+On Windows:
 
-## 🔗 API Endpoints
-
-### 📦 Product APIs
-
-#### 1. Create Product
-
-```
-POST /products
+```cmd
+mvnw.cmd spring-boot:run
 ```
 
-**Request Body:**
+The API base URL is typically: `http://localhost:8093`
+
+## Authentication
+
+- **HTTP Basic** is enabled (`SecurityConfig`).
+- Users are loaded from the **`users`** table via `CustomUserDetailService` (username = `userName`, password stored in DB).
+- New users registered through **`POST /auth/register`** have passwords hashed with **BCrypt** (`AuthService`).
+- **First-time setup:** you need at least one user row in the database (or register via `/auth/register` if your security rules allow the caller to hit that endpoint). Use a role value that maps to Spring Security roles (e.g. `ADMIN` or `USER` — the `ROLE_` prefix is added by Spring when using `.roles(...)`).
+
+In Postman: **Authorization → Basic Auth**, then send the request.
+
+CSRF is **disabled** for easier API testing (`csrf.disable()` in `SecurityConfig`).
+
+## API overview
+
+Base URL: `http://localhost:8093`
+
+### Users (`/user`)
+
+| Method | Path | Description | Roles (typical) |
+|--------|------|-------------|-----------------|
+| `POST` | `/user/addUser` | Create or update user (upsert by `userName`) | `ADMIN` |
+| `PUT` | `/user/updateUser` | Update user (upsert) | `ADMIN` |
+
+Request body example:
 
 ```json
 {
-  "name": "Laptop",
-  "price": 50000,
-  "quantity": 10
+  "userName": "alice",
+  "password": "secret",
+  "role": "USER"
 }
 ```
 
----
+### Auth (`/auth`)
 
-#### 2. Get All Products
+| Method | Path | Description | Roles (typical) |
+|--------|------|-------------|-----------------|
+| `POST` | `/auth/register` | Register user (BCrypt password) | `ADMIN` |
 
-```
-GET /products
-```
+### Products (`/products`)
 
----
+| Method | Path | Description | Roles (typical) |
+|--------|------|-------------|-----------------|
+| `GET` | `/products` | List all products | `USER`, `ADMIN` |
+| `GET` | `/products/{id}` | Get product by id | `USER`, `ADMIN` |
+| `POST` | `/products/addProduct` | Create product | `ADMIN` |
+| `PUT` | `/products/updateProduct` | Update product | `ADMIN` |
+| `PATCH` | `/products/{id}/price-quantity` | Update price and quantity (query: `newPrice`, `newQuantity`) | `ADMIN` |
+| `PATCH` | `/products/{id}/visibility` | Update visibility (query: `isVisible`) | `ADMIN` |
 
-#### 3. Get Product by ID
+Example PATCH (price/quantity):
 
-```
-GET /products/{id}
-```
-
----
-
-#### 4. Update Product
-
-```
-PUT /products/{id}
-```
-
-**Request Body:**
-
-```json
-{
-  "name": "Laptop",
-  "price": 55000,
-  "quantity": 8
-}
+```http
+PATCH /products/1/price-quantity?newPrice=99.99&newQuantity=50
 ```
 
----
+### Cart (`/cart`)
 
-#### 5. Delete Product
+| Method | Path | Description | Roles (typical) |
+|--------|------|-------------|-----------------|
+| `POST` | `/cart/addItem` | Add to cart (`userName`, `productId`, `quantity`) | `USER`, `ADMIN` |
+| `PUT` | `/cart/updateItems` | Set line quantity (`userName`, `productId`, `quantity`) | `USER`, `ADMIN` |
+| `DELETE` | `/cart/removeItems` | Remove line (`userName`, `productId`) | `USER`, `ADMIN` |
 
-```
-DELETE /products/{id}
-```
+Example:
 
----
-
-### 👤 User APIs
-
-#### 1. Create User
-
-```
-POST /users
+```http
+POST /cart/addItem?userName=alice&productId=1&quantity=2
 ```
 
-**Request Body:**
+### Orders (`/orders`)
 
-```json
-{
-  "name": "Kamlesh",
-  "email": "kamlesh@example.com"
-}
+| Method | Path | Description | Roles (typical) |
+|--------|------|-------------|-----------------|
+| `POST` | `/orders/place` | Place order from user’s cart (`userName`) | `USER`, `ADMIN` |
+
+Example:
+
+```http
+POST /orders/place?userName=alice
 ```
 
----
+## Database notes
 
-#### 2. Get User by ID
+- JPA maps entities to tables such as `users`, `products`, `cart`, `cart_items`, `orders`, `order_items` (see `@Table` on entity classes).
+- Primary keys in this project use **`GenerationType.SEQUENCE`** for several entities; ensure your Oracle schema and Hibernate DDL settings match your expectations.
 
-```
-GET /users/{id}
-```
+## Build & test
 
----
-
-### 🛒 Cart APIs
-
-#### 1. Add Item to Cart
-
-```
-POST /cart/add
+```bash
+./mvnw test
 ```
 
-**Request Body:**
+## Project layout (main packages)
 
-```json
-{
-  "userId": 1,
-  "productId": 2,
-  "quantity": 3
-}
-```
+- `com.example.product.management` — application entry  
+- `com.example.product.management.controller` — REST controllers  
+- `com.example.product.management.service` — business logic  
+- `com.example.product.management.repository` — Spring Data JPA  
+- `com.example.product.management.entity` — JPA entities  
+- `com.example.product.management.config` — security configuration  
 
----
+## License
 
-#### 2. Remove Item from Cart
-
-```
-DELETE /cart/remove/{cartItemId}
-```
-
----
-
-#### 3. View Cart
-
-```
-GET /cart/{userId}
-```
-
----
-
-### 📦 Order APIs
-
-#### 1. Place Order
-
-```
-POST /orders/place/{userId}
-```
-
----
-
-#### 2. Get Orders by User
-
-```
-GET /orders/{userId}
-```
-
----
-
-## ⚙️ How to Run
-
-1. Clone the repository:
-
-```
-git clone https://github.com/Kamleshmadan/productMangement.git
-```
-
-2. Navigate to project:
-
-```
-cd productMangement
-```
-
-3. Run the application:
-
-```
-mvn spring-boot:run
-```
-
----
-
-## 🧠 Key Concepts Used
-
-* REST APIs
-* Dependency Injection
-* Layered Architecture
-* Exception Handling
-* JPA & Hibernate ORM
-
----
-
-## 🚧 Future Improvements
-
-* Add DTO layer
-* Add validation annotations
-* Implement authentication (JWT)
-* Improve logging
-
----
-
-## 👨‍💻 Author
-
-**Kamlesh Madan**
-
-Give it a ⭐ on GitHub!
+Add a license file or section here if you publish the repository publicly.
